@@ -881,6 +881,60 @@ struct {
 } MathImpl;
 
 struct {
+  void __apply_dropout__(const k_list& tensor, std::mt19937& gen,
+                         std::uniform_real_distribution<> dis,
+                         const double& dropoutRate) {
+    for (auto& val : tensor->elements) {
+      if (std::holds_alternative<k_list>(val)) {
+        __apply_dropout__(std::get<k_list>(val), gen, dis, dropoutRate);
+      } else {
+        if (dis(gen) < dropoutRate) {
+          val = 0.0;
+        }
+      }
+    }
+  }
+
+  void __apply_weight_decay__(const Token& token, const k_list& tensor,
+                              const double& lambda) {
+    for (auto& val : tensor->elements) {
+      if (std::holds_alternative<k_list>(val)) {
+        __apply_weight_decay__(token, std::get<k_list>(val), lambda);
+      } else {
+        auto weight = get_double(token, val);
+        weight -= lambda * weight;
+        val = weight;
+      }
+    }
+  }
+
+  double __compute_l1_norm__(const Token& token, const k_list& tensor) {
+    double sum = 0.0;
+    for (const auto& val : tensor->elements) {
+      if (std::holds_alternative<k_list>(val)) {
+        sum += __compute_l1_norm__(token, std::get<k_list>(val));
+      } else {
+        sum += std::abs(get_double(token, val));
+      }
+    }
+    return sum;
+  }
+
+  double __compute_l2_norm__(const Token& token, const k_list& tensor) {
+    double sum = 0.0;
+    for (const auto& val : tensor->elements) {
+      if (std::holds_alternative<k_list>(val)) {
+        sum += __compute_l2_norm__(token, std::get<k_list>(val));
+      } else {
+        double value = get_double(token, val);
+        sum += value * value;
+      }
+    }
+    return sum;
+  }
+} TensorFunc;
+
+struct {
   k_value __dropout__(const Token& token, const k_value& inputs,
                       const k_value& dropout_rate) {
     if (!std::holds_alternative<k_list>(inputs)) {
@@ -889,17 +943,13 @@ struct {
     }
 
     const auto& dropoutRate = get_double(token, dropout_rate);
-    auto& inputsList = std::get<k_list>(inputs)->elements;
 
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
 
-    for (auto& val : inputsList) {
-      if (dis(gen) < dropoutRate) {
-        val = 0.0;
-      }
-    }
+    TensorFunc.__apply_dropout__(std::get<k_list>(inputs), gen, dis,
+                                 dropoutRate);
 
     return inputs;
   }
@@ -916,14 +966,10 @@ struct {
           token, "Expected a double for lambda in L1 regularization.");
     }
 
-    double sum = 0.0;
     double lambdaValue = get_double(token, lambda);
-    const auto& weightValues = std::get<k_list>(weights)->elements;
-
-    for (const auto& weight : weightValues) {
-      sum += std::abs(get_double(token, weight));
-    }
-    return lambdaValue * sum;
+    double norm =
+        TensorFunc.__compute_l1_norm__(token, std::get<k_list>(weights));
+    return lambdaValue * norm;
   }
 
   k_value __l2_regularization__(const Token& token, const k_value& weights,
@@ -938,16 +984,10 @@ struct {
           token, "Expected a double for lambda in L2 regularization.");
     }
 
-    double sum = 0.0;
     double lambdaValue = get_double(token, lambda);
-    const auto& weightValues = std::get<k_list>(weights)->elements;
-
-    for (const auto& weight : weightValues) {
-      auto w = get_double(token, weight);
-      sum += w * w;
-    }
-
-    return lambdaValue * sum;
+    double norm =
+        TensorFunc.__compute_l2_norm__(token, std::get<k_list>(weights));
+    return lambdaValue * norm;
   }
 
   k_value __elastic_net__(const Token& token, const k_value& weights,
@@ -967,12 +1007,9 @@ struct {
       throw ConversionError(token, "Expected list in weight decay function.");
     }
 
-    auto& weightsList = std::get<k_list>(weights)->elements;
     const auto& lambdaValue = get_double(token, lambda);
-    for (auto& weight : weightsList) {
-      const auto& w = get_double(token, weight);
-      weight = w - (lambdaValue * w);
-    }
+    TensorFunc.__apply_weight_decay__(token, std::get<k_list>(weights),
+                                      lambdaValue);
   }
 } MLRegularizationBuiltins;
 
@@ -1829,7 +1866,7 @@ struct {
     return std::log(1 + std::exp(get_double(token, x)));
   }
 
-  k_value softsign(const Token& token, const k_value& x) {
+  k_value __softsign__(const Token& token, const k_value& x) {
     if (!std::holds_alternative<k_list>(x)) {
       throw ConversionError(token, "Expected list in softsign function.");
     }
@@ -1877,7 +1914,7 @@ struct {
     return std::make_shared<List>(result);
   }
 
-  k_value tanh_shrink(const Token& token, const k_value& xValue) {
+  k_value __tanh_shrink__(const Token& token, const k_value& xValue) {
     const auto& x = get_double(token, xValue);
     return x - std::tanh(x);
   }

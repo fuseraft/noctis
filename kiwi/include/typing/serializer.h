@@ -165,17 +165,38 @@ struct Serializer {
     return sv.str();
   }
 
+  static bool has_nested_list(const k_list& list) {
+    const auto& elements = list->elements;
+    for (const auto& element : elements) {
+      if (std::holds_alternative<k_list>(element)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   static k_string pretty_serialize_list(const k_list& list, int indent = 0) {
     std::ostringstream sv;
     sv << "[" << std::endl;
     std::string indentString(indent + 2, ' ');
 
-    for (auto it = list->elements.begin(); it != list->elements.end(); ++it) {
-      if (it != list->elements.begin()) {
-        sv << "," << std::endl;
+    auto hasNestedList = has_nested_list(list);
+    const auto& elements = list->elements;
+    
+    for (auto it = elements.begin(); it != elements.end(); ++it) {
+      if (it != elements.begin()) {
+        if (hasNestedList) {
+          sv << "," << std::endl;
+        } else {
+          sv << ",";
+        }
       }
 
       sv << indentString;
+
+      if (!hasNestedList && it == elements.begin()) {
+        indentString = " ";
+      }
 
       if (std::holds_alternative<k_list>(*it)) {
         sv << pretty_serialize_list(std::get<k_list>(*it), indent + 2);

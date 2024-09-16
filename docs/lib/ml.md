@@ -42,8 +42,8 @@
 
 ### Regularization:
 - `dropout(x, dropout_rate = 0.5)`
-- `elastic_net(weights, lambda1 = 0.01, lambda2 = 0.01)`
+- `weight_decay(weights, lambda = 0.01)`
 - `l1_regularization(weights, lambda = 0.01)`
 - `l2_regularization(weights, lambda = 0.01)`
-- `weight_decay(weights, lambda = 0.01)`
+- `elastic_net(weights, lambda1 = 0.01, lambda2 = 0.01)`
 

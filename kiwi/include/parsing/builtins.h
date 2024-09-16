@@ -541,6 +541,68 @@ struct {
 } ConsoleBuiltins;
 
 struct {
+  const k_string RegDropout = "__dropout__";
+  const k_string RegL1Lasso = "__l1_regularization__";
+  const k_string RegL2Ridge = "__l2_regularization__";
+  const k_string RegElasticNet = "__elastic_net__";
+  const k_string RegWeightDecay = "__weight_decay__";
+
+  const k_string OptimRMSProp = "__rmsprop__";
+  const k_string OptimAdadelta = "__adadelta__";
+  const k_string OptimAdagrad = "__adagrad__";
+  const k_string OptimAdamax = "__adamax__";
+  const k_string OptimAdam = "__adam__";
+  const k_string OptimNadam = "__nadam__";
+  const k_string OptimSGD = "__sgd__";
+  const k_string OptimSGDNesterov = "__nesterov_sgd__";
+
+  const k_string LossBinaryCrossEntropy = "__binary_crossentropy__";
+  const k_string LossBinaryFocal = "__binary_focal_loss__";
+  const k_string LossCatCrossEntropy = "__categorical_crossentropy__";
+  const k_string LossCosSimilarity = "__cosine_similarity__";
+  const k_string LossDice = "__dice_loss__";
+  const k_string LossFocal = "__focal_loss__";
+  const k_string LossKLDivergence = "__kldivergence__";
+  const k_string LossHinge = "__hinge_loss__";
+  const k_string LossHuber = "__huber_loss__";
+  const k_string LossLogCosh = "__log_cosh__";
+  const k_string LossMeanAbsoluteError = "__mae__";
+  const k_string LossMeanSquaredError = "__mse__";
+  const k_string LossQuantile = "__quantile_loss__";
+
+  const k_string ActELU = "__elu__";
+  const k_string ActGELU = "__gelu__";
+  const k_string ActGELUApprox = "__gelu_approx__";
+  const k_string ActReLU = "__relu__";
+  const k_string ActPReLU = "__prelu__";
+  const k_string ActSigmoid = "__sigmoid__";
+  const k_string ActSoftmax = "__softmax__";
+  const k_string ActSoftplus = "__softplus__";
+  const k_string ActSoftsign = "__softsign__";
+  const k_string ActSELU = "__selu__";
+  const k_string ActSwish = "__swish__";
+  const k_string ActTanh = "__tanh_activation__";
+  const k_string ActTanhshrink = "__tanh_shrink__";
+  const k_string ActLeakyReLU = "__leaky_relu__";
+  const k_string ActLinear = "__linear__";
+
+  std::unordered_set<k_string> builtins = {
+      RegDropout, RegWeightDecay, RegL1Lasso, RegL2Ridge, RegElasticNet};
+  std::unordered_set<KName> st_builtins = {
+      KName::Builtin_MLReg_Dropout, KName::Builtin_MLReg_WeightDecay,
+      KName::Builtin_MLReg_L1Lasso, KName::Builtin_MLReg_L2Ridge,
+      KName::Builtin_MLReg_ElasticNet};
+
+  bool is_builtin(const k_string& arg) {
+    return builtins.find(arg) != builtins.end();
+  }
+
+  bool is_builtin(const KName& arg) {
+    return st_builtins.find(arg) != st_builtins.end();
+  }
+} MLBuiltins;
+
+struct {
   const k_string Chars = "chars";
   const k_string IsA = "is_a";
   const k_string Join = "join";
@@ -674,7 +736,7 @@ struct {
            HttpBuiltins.is_builtin(arg) || WebServerBuiltins.is_builtin(arg) ||
            LoggingBuiltins.is_builtin(arg) || EncoderBuiltins.is_builtin(arg) ||
            SerializerBuiltins.is_builtin(arg) ||
-           ReflectorBuiltins.is_builtin(arg);
+           ReflectorBuiltins.is_builtin(arg) || MLBuiltins.is_builtin(arg);
   }
 
   bool is_builtin_method(const KName& arg) {
@@ -685,7 +747,7 @@ struct {
            HttpBuiltins.is_builtin(arg) || WebServerBuiltins.is_builtin(arg) ||
            LoggingBuiltins.is_builtin(arg) || EncoderBuiltins.is_builtin(arg) ||
            SerializerBuiltins.is_builtin(arg) ||
-           ReflectorBuiltins.is_builtin(arg);
+           ReflectorBuiltins.is_builtin(arg) || MLBuiltins.is_builtin(arg);
   }
 } KiwiBuiltins;
 

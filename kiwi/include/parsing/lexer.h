@@ -617,6 +617,24 @@ class Lexer {
     return createToken(KTokenType::IDENTIFIER, st, builtin);
   }
 
+  Token parseMLBuiltin(const std::string& builtin) {
+    auto st = KName::Default;
+
+    if (builtin == MLBuiltins.RegDropout) {
+      st = KName::Builtin_MLReg_Dropout;
+    } else if (builtin == MLBuiltins.RegWeightDecay) {
+      st = KName::Builtin_MLReg_WeightDecay;
+    } else if (builtin == MLBuiltins.RegL1Lasso) {
+      st = KName::Builtin_MLReg_L1Lasso;
+    } else if (builtin == MLBuiltins.RegL2Ridge) {
+      st = KName::Builtin_MLReg_L2Ridge;
+    } else if (builtin == MLBuiltins.RegElasticNet) {
+      st = KName::Builtin_MLReg_ElasticNet;
+    }
+
+    return createToken(KTokenType::IDENTIFIER, st, builtin);
+  }
+
   Token parseSerializerBuiltin(const std::string& builtin) {
     auto st = KName::Default;
 
@@ -1000,6 +1018,8 @@ class Lexer {
       return parseSerializerBuiltin(builtin);
     } else if (ReflectorBuiltins.is_builtin(builtin)) {
       return parseReflectorBuiltin(builtin);
+    } else if (MLBuiltins.is_builtin(builtin)) {
+      return parseMLBuiltin(builtin);
     }
 
     return createToken(KTokenType::IDENTIFIER, KName::Default, builtin);

@@ -13,6 +13,7 @@
 #include "builtins/fileio_handler.h"
 #include "builtins/logging_handler.h"
 #include "builtins/math_handler.h"
+#include "builtins/ml_handler.h"
 #include "builtins/sys_handler.h"
 #include "builtins/time_handler.h"
 #include "builtins/http_handler.h"
@@ -25,7 +26,9 @@ class BuiltinDispatch {
   static k_value execute(
       const Token& term, const KName& builtin, const std::vector<k_value>& args,
       const std::unordered_map<k_string, k_string>& kiwiArgs) {
-    if (FileIOBuiltIns.is_builtin(builtin)) {
+    if (MLBuiltins.is_builtin(builtin)) {
+      return MLBuiltinHandler::execute(term, builtin, args);
+    } else if (FileIOBuiltIns.is_builtin(builtin)) {
       return FileIOBuiltinHandler::execute(term, builtin, args);
     } else if (TimeBuiltins.is_builtin(builtin)) {
       return TimeBuiltinHandler::execute(term, builtin, args);
