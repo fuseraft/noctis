@@ -1,7 +1,7 @@
 ### Loss Functions:
 - `binary_crossentropy(y_true, y_pred)`
-- `binary_focal_loss(y_true, y_pred, gamma = 2.0, alpha = 0.25)`
-- `categorical_crossentropy(y_true, y_pred)`
+- `binary_focal_loss(y_true, y_pred, gamma = 2.0, alpha = 0.25, epsilon = 1e-8)`
+- `categorical_crossentropy(y_true, y_pred, epsilon = 1e-8)`
 - `cosine_similarity(y_true, y_pred)`
 - `dice_loss(y_true, y_pred)`
 - `focal_loss(y_true, y_pred, gamma = 2.0, alpha = 0.25)`
@@ -32,11 +32,11 @@
 
 ### Optimizers:
 - `rmsprop(weights, gradients, v, learning_rate = 0.001, decay_rate = 0.9)`
-- `adadelta(weights, gradients, accum_grad, accum_update, rho = 0.95)`
-- `adagrad(weights, gradients, v, learning_rate = 0.01)`
-- `adam(weights, gradients, m, v, learning_rate = 0.001, beta1 = 0.9, beta2 = 0.999, t = 1)`
-- `adamax(weights, gradients, m, v, learning_rate = 0.002, beta1 = 0.9, beta2 = 0.999, t = 1)`
-- `nadam(weights, gradients, m, v, learning_rate = 0.001, beta1 = 0.9, beta2 = 0.999, t = 1)`
+- `adadelta(weights, gradients, accum_grad, accum_update, rho = 0.95, epsilon = 1e-6)`
+- `adagrad(weights, gradients, v, learning_rate = 0.01, epsilon = 1e-8)`
+- `adam(weights, gradients, m, v, learning_rate = 0.001, beta1 = 0.9, beta2 = 0.999, t = 1, epsilon = 1e-8)`
+- `adamax(weights, gradients, m, v, learning_rate = 0.002, beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8)`
+- `nadam(weights, gradients, m, v, learning_rate = 0.001, beta1 = 0.9, beta2 = 0.999, t = 1, epsilon = 1e-8)`
 - `sgd(weights, gradients, velocity, learning_rate = 0.01, momentum = 0.0)`
 - `nesterov_sgd(weights, gradients, velocity, learning_rate = 0.01, momentum = 0.9)`
 
@@ -46,4 +46,3 @@
 - `l1_regularization(weights, lambda = 0.01)`
 - `l2_regularization(weights, lambda = 0.01)`
 - `elastic_net(weights, lambda1 = 0.01, lambda2 = 0.01)`
-

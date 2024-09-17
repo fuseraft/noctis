@@ -177,12 +177,17 @@ struct Serializer {
 
   static k_string pretty_serialize_list(const k_list& list, int indent = 0) {
     std::ostringstream sv;
-    sv << "[" << std::endl;
+    auto hasNestedList = has_nested_list(list);
+
+    if (hasNestedList) {
+      sv << "[" << std::endl;
+    } else {
+      sv << "[";
+    }
     std::string indentString(indent + 2, ' ');
 
-    auto hasNestedList = has_nested_list(list);
     const auto& elements = list->elements;
-    
+
     for (auto it = elements.begin(); it != elements.end(); ++it) {
       if (it != elements.begin()) {
         if (hasNestedList) {
@@ -192,7 +197,9 @@ struct Serializer {
         }
       }
 
-      sv << indentString;
+      if (hasNestedList) {
+        sv << indentString;
+      }
 
       if (!hasNestedList && it == elements.begin()) {
         indentString = " ";
@@ -209,7 +216,11 @@ struct Serializer {
       }
     }
 
-    sv << std::endl << std::string(indent, ' ') << "]";
+    if (hasNestedList) {
+      sv << std::endl << std::string(indent, ' ') << "]";
+    } else {
+      sv << "]";
+    }
     return sv.str();
   }
 

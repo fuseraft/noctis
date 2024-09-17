@@ -1,38 +1,222 @@
 # For experimentation and fun.
 
+/####################################
+## Various regularization methods ##
+###################################
+
 a = [[[1] * 10, [1] * 10] * 2] * 2
 println __dropout__(a).pretty()
-
-/#
-scs@fuseraft:~/kiwi$ ./bin/kiwi debug
-[
-  [
-    [
-      0, 0, 1, 1, 0, 1, 1, 0, 1, 1
-    ],
-    [
-      0, 1, 1, 0, 1, 0, 0, 1, 1, 0
-    ],
-    [
-      1, 1, 0, 0, 1, 1, 0, 0, 1, 0
-    ],
-    [
-      0, 0, 1, 1, 1, 0, 0, 1, 1, 1
-    ]
-  ],
-  [
-    [
-      1, 1, 1, 1, 1, 1, 1, 1, 1, 0
-    ],
-    [
-      1, 1, 1, 1, 0, 1, 0, 1, 1, 1
-    ],
-    [
-      1, 1, 1, 0, 1, 0, 0, 1, 0, 1
-    ],
-    [
-      0, 1, 1, 0, 0, 1, 1, 1, 1, 0
-    ]
-  ]
-]
+println __weight_decay__(a, 0.01).pretty()
+println __l1_regularization__(a, 0.01)
+println __l2_regularization__(a, 0.01)
+println __elastic_net__(a, 0.01, 0.01)
+println a.pretty()
 #/
+
+/##############
+### RMSProp ##
+#############
+
+# Initialize weights, gradients, and velocity vectors
+w = [[[0.5, 0.5], [0.3, 0.3]], [[0.1, 0.1], [0.2, 0.2]]]
+g = [[[0.1, 0.2], [0.3, 0.4]], [[0.5, 0.6], [0.7, 0.8]]]
+v = [[[0.0, 0.0], [0.0, 0.0]], [[0.0, 0.0], [0.0, 0.0]]]
+lr = 0.01
+dr = 0.9
+
+println __rmsprop__(w, g, v, lr, dr) # [[[0.468377, 0.468377], [0.268377, 0.268377]], [[0.0683772, 0.0683772], [0.168377, 0.168377]]]
+#/
+
+/##############
+## Adadelta ##
+#############
+
+# Initialize weights, gradients, and accumulation vectors
+w = [[0.5, 0.4], [0.3, 0.2]]
+g = [[0.1, -0.2], [0.3, -0.1]]
+accum_grad = [[0.0, 0.0], [0.0, 0.0]]
+accum_update = [[0.0, 0.0], [0.0, 0.0]]
+rho = 0.95 # decay rate
+
+__adadelta__(w, g, accum_grad, accum_update, rho) # default epsilon for adadelta is 1e-6
+println w # [[0.495532, 0.404471], [0.295528, 0.204468]]
+println accum_grad # [[0.0005, 0.002], [0.0045, 0.0005]]
+println accum_update # [[9.98004e-07, 9.995e-07], [9.99778e-07, 9.98004e-07]]
+#/
+
+/#############
+## Adagrad ##
+############
+
+# Initialize weights, gradients, and other vectors
+w = [[0.5,0.4],[0.3,0.2]]
+g = [[0.1,0.2],[0.3,0.4]]
+v = [[0.01,0.01],[0.01,0.01]]
+
+lr = 0.01
+
+__adagrad__(w, g, v, lr)
+
+println w # [[0.492929, 0.391056], [0.290513, 0.190299]]
+println v # [[0.02, 0.05], [0.1, 0.17]]
+#/
+
+/#############
+## Adammax ##
+############
+
+# Initialize weights, gradients, and other vectors
+w = [[0.5, 0.4], [0.3, 0.2]]
+g = [[0.1, 0.2], [0.3, 0.4]]
+m = [[0.0, 0.0], [0.0, 0.0]] # First moment vector
+v = [[0.0, 0.0], [0.0, 0.0]] # Infinity norm (maximum) of the past squared gradients
+
+# Set hyperparameters
+lr = 0.002
+beta1 = 0.9
+beta2 = 0.999
+
+__adamax__(w, g, m, v, lr, beta1, beta2)
+
+println w # [[0.4998, 0.3998], [0.2998, 0.1998]]
+println m # [[0.01, 0.02], [0.03, 0.04]]
+println v # [[0.1, 0.2], [0.3, 0.4]]
+#/
+
+/##########
+## Adam ##
+#########
+
+# Initialize weights, gradients, and moment vectors
+w = [[0.5, 0.4], [0.3, 0.2]]
+g = [[0.1, 0.2], [0.3, 0.4]]
+m = [[0.0, 0.0], [0.0, 0.0]] # First moment vector
+v = [[0.0, 0.0], [0.0, 0.0]] # Second moment vector
+
+# Set hyperparameters
+lr = 0.002
+beta1 = 0.9
+beta2 = 0.999
+t = 1 # Time step
+
+# Perform optimization step
+__adam__(w, g, m, v, lr, beta1, beta2, t)
+
+println w # [[0.498, 0.398], [0.298, 0.198]]
+println m # [[0.01, 0.02], [0.03, 0.04]]
+println v # [[1e-05, 4e-05], [9e-05, 0.00016]]
+#/
+
+/###########
+## Nadam ##
+##########
+
+# Initialize weights, gradients, and moment vectors
+w = [[0.5, 0.4], [0.3, 0.2]]
+g = [[0.1, 0.2], [0.3, 0.4]]
+m = [[0.0, 0.0], [0.0, 0.0]] # First moment vector
+v = [[0.0, 0.0], [0.0, 0.0]] # Second moment vector
+
+# Set hyperparameters
+lr = 0.001
+beta1 = 0.9
+beta2 = 0.999
+t = 1 # Time step
+
+# Perform optimization step
+__nadam__(w, g, m, v, lr, beta1, beta2, t)
+
+println w # [[0.49981, 0.39981], [0.29981, 0.19981]]
+println m # [[0.01, 0.02], [0.03, 0.04]]
+println v # [[1e-05, 4e-05], [9e-05, 0.00016]]
+#/
+
+/#################################
+## Stochastic Gradient Descent ##
+################################
+
+# Initialize weights, gradients, and velocity
+weights = [[0.5, 0.4], [0.3, 0.2]]
+gradients = [[0.1, 0.2], [0.3, 0.4]]
+velocity = [[0.0, 0.0], [0.0, 0.0]] # Velocity for momentum
+
+# Set hyperparameters
+learning_rate = 0.01
+momentum = 0.9
+
+# Perform SGD optimization step
+__sgd__(weights, gradients, velocity, learning_rate, momentum)
+
+# Output the results
+println weights  # [[0.499, 0.398], [0.297, 0.196]]
+println velocity # [[-0.001, -0.002], [-0.003, -0.004]]
+#/
+
+/##################
+## Nesterov SGD ##
+#################
+
+# Initialize 3D tensors for weights, gradients, and velocity
+weights = [
+  [[0.5, 0.4], [0.3, 0.2]],
+  [[0.6, 0.5], [0.4, 0.3]]
+]
+
+gradients = [
+  [[0.1, 0.2], [0.3, 0.4]],
+  [[0.2, 0.1], [0.4, 0.3]]
+]
+
+velocity = [
+  [[0.0, 0.0], [0.0, 0.0]],
+  [[0.0, 0.0], [0.0, 0.0]]
+]
+
+# Set hyperparameters
+learning_rate = 0.01
+momentum = 0.9
+
+# Perform Nesterov SGD optimization step
+__nesterov_sgd__(weights, gradients, velocity, learning_rate, momentum)
+
+# Output results:
+println weights.pretty()
+println velocity.pretty()
+
+# [
+#   [
+#     [0.4981,0.3962],
+#     [0.2943,0.1924]
+#   ],
+#   [
+#     [0.5962,0.4981],
+#     [0.3924,0.2943]
+#   ]
+# ]
+# [
+#   [
+#     [-0.001,-0.002],
+#     [-0.003,-0.004]
+#   ],
+#   [
+#     [-0.002,-0.001],
+#     [-0.004,-0.003]
+#   ]
+# ]
+#/
+
+/##########################
+## Binary Cross Entropy ##
+#########################
+
+# Initialize ground truth labels and predicted probabilities
+y_true = [1, 0, 1, 0]
+y_pred = [0.9, 0.2, 0.8, 0.1]
+
+# Calculate binary cross-entropy loss
+loss = __binary_crossentropy__(y_true, y_pred)
+
+# Output the result
+println loss # 0.164252
+#/
+

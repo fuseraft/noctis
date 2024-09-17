@@ -7,6 +7,7 @@
 #include <memory>
 #include <sstream>
 #include "parsing/tokens.h"
+#include "parsing/builtins.h"
 #include "tracing/error.h"
 #include "typing/value.h"
 #include "rng.h"
@@ -935,11 +936,10 @@ struct {
 } TensorFunc;
 
 struct {
-  k_value __dropout__(const Token& token, const k_value& inputs,
+  k_value __dropout__(const Token& token, const k_value& weights,
                       const k_value& dropout_rate) {
-    if (!std::holds_alternative<k_list>(inputs)) {
-      throw ConversionError(
-          token, "Expected a list of inputs for dropout regularization.");
+    if (!std::holds_alternative<k_list>(weights)) {
+      throw TensorError(token, "weights", MLBuiltins.RegDropout);
     }
 
     const auto& dropoutRate = get_double(token, dropout_rate);
@@ -948,43 +948,33 @@ struct {
     std::mt19937 gen(rd());
     std::uniform_real_distribution<> dis(0.0, 1.0);
 
-    TensorFunc.__apply_dropout__(std::get<k_list>(inputs), gen, dis,
+    TensorFunc.__apply_dropout__(std::get<k_list>(weights), gen, dis,
                                  dropoutRate);
 
-    return inputs;
+    return weights;
   }
 
-  k_value __l1_regularization__(const Token& token, const k_value& weights,
-                                const k_value& lambda) {
+  k_value __l1_regularization__(
+      const Token& token, const k_value& weights, const k_value& lambda,
+      const k_string& builtin = MLBuiltins.RegL1Lasso) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(
-          token, "Expected a list for weights in L1 regularization.");
+      throw TensorError(token, "weights", builtin);
     }
 
-    if (!std::holds_alternative<double>(lambda)) {
-      throw ConversionError(
-          token, "Expected a double for lambda in L1 regularization.");
-    }
-
-    double lambdaValue = get_double(token, lambda);
+    const auto& lambdaValue = get_double(token, lambda);
     double norm =
         TensorFunc.__compute_l1_norm__(token, std::get<k_list>(weights));
     return lambdaValue * norm;
   }
 
-  k_value __l2_regularization__(const Token& token, const k_value& weights,
-                                const k_value& lambda) {
+  k_value __l2_regularization__(
+      const Token& token, const k_value& weights, const k_value& lambda,
+      const k_string& builtin = MLBuiltins.RegL2Ridge) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(
-          token, "Expected a list for weights in L2 regularization.");
+      throw TensorError(token, "weights", builtin);
     }
 
-    if (!std::holds_alternative<double>(lambda)) {
-      throw ConversionError(
-          token, "Expected a double for lambda in L2 regularization.");
-    }
-
-    double lambdaValue = get_double(token, lambda);
+    const auto& lambdaValue = get_double(token, lambda);
     double norm =
         TensorFunc.__compute_l2_norm__(token, std::get<k_list>(weights));
     return lambdaValue * norm;
@@ -994,9 +984,11 @@ struct {
                           const k_value& lambda1 = 0.01,
                           const k_value& lambda2 = 0.01) {
     const auto& l1_term =
-        get_double(token, __l1_regularization__(token, weights, lambda1));
+        get_double(token, __l1_regularization__(token, weights, lambda1,
+                                                MLBuiltins.RegElasticNet));
     const auto& l2_term =
-        get_double(token, __l2_regularization__(token, weights, lambda2));
+        get_double(token, __l2_regularization__(token, weights, lambda2,
+                                                MLBuiltins.RegElasticNet));
 
     return l1_term + l2_term;
   }
@@ -1004,7 +996,7 @@ struct {
   void __weight_decay__(const Token& token, const k_value& weights,
                         const k_value& lambda = 0.01) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(token, "Expected list in weight decay function.");
+      throw TensorError(token, "weights", MLBuiltins.RegWeightDecay);
     }
 
     const auto& lambdaValue = get_double(token, lambda);
@@ -1018,20 +1010,13 @@ struct {
                    const k_value& gradients, k_value& v,
                    const k_value& learning_rate, const k_value& decay_rate) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(token,
-                            "Expected a list for weights in root mean squared "
-                            "propagation optimizer.");
+      throw TensorError(token, "weights", MLBuiltins.OptimRMSProp);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(token,
-                            "Expected a list for gradients in root mean "
-                            "squared propagation optimizer.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimRMSProp);
     }
     if (!std::holds_alternative<k_list>(v)) {
-      throw ConversionError(
-          token,
-          "Expected a list for running average of squared gradients in root "
-          "mean squared propagation optimizer.");
+      throw TensorError(token, "v", MLBuiltins.OptimRMSProp);
     }
 
     const auto& gradientsList = std::get<k_list>(gradients)->elements;
@@ -1040,95 +1025,95 @@ struct {
 
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != vList.size()) {
-      throw InvalidOperationError(token,
-                                  "All lists must be the same size in root "
-                                  "mean squared propagation optimizer.");
+      throw TensorShapeError(token, MLBuiltins.OptimRMSProp);
     }
 
     const auto& learningRate = get_double(token, learning_rate);
     const auto& decayRate = get_double(token, decay_rate);
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      const auto& gradient = get_double(token, gradientsList[i]);
-      vList[i] = decayRate * get_double(token, vList[i]) +
-                 (1.0 - decayRate) * gradient * gradient;
-      weightsList[i] =
-          get_double(token, weightsList[i]) -
-          learningRate * gradient /
-              (std::sqrt(get_double(token, vList[i])) + MathImpl.__epsilon__());
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(vList[i])) {
+        __rmsprop__(token, weightsList[i], gradientsList[i], vList[i],
+                    learning_rate, decay_rate);
+      } else {
+        const auto& gradient = get_double(token, gradientsList[i]);
+        vList[i] = decayRate * get_double(token, vList[i]) +
+                   (1.0 - decayRate) * gradient * gradient;
+        weightsList[i] = get_double(token, weightsList[i]) -
+                         learningRate * gradient /
+                             (std::sqrt(get_double(token, vList[i])) +
+                              MathImpl.__epsilon__());
+      }
     }
   }
 
   void __adadelta__(const Token& token, k_value& weights,
                     const k_value& gradients, k_value& accum_grad,
-                    k_value& accum_update, const k_value& rho) {
+                    k_value& accum_update, const k_value& rho,
+                    const k_value& epsilon) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(
-          token, "Expected a list for weights in adaptive gradient optimizer.");
+      throw TensorError(token, "weights", MLBuiltins.OptimAdadelta);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(
-          token,
-          "Expected a list for gradients in adaptive gradient optimizer.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimAdadelta);
     }
     if (!std::holds_alternative<k_list>(accum_grad)) {
-      throw ConversionError(token,
-                            "Expected a list for accumulation of squared "
-                            "gradients in adaptive gradient optimizer.");
+      throw TensorError(token, "accum_grad", MLBuiltins.OptimAdadelta);
     }
     if (!std::holds_alternative<k_list>(accum_update)) {
-      throw ConversionError(token,
-                            "Expected a list for accumulation of squared "
-                            "updates in adaptive gradient optimizer.");
+      throw TensorError(token, "accum_update", MLBuiltins.OptimAdadelta);
     }
 
     const auto& gradientsList = std::get<k_list>(gradients)->elements;
     auto& weightsList = std::get<k_list>(weights)->elements;
     auto& accumGradList = std::get<k_list>(accum_grad)->elements;
     auto& accumUpdateList = std::get<k_list>(accum_update)->elements;
-    auto epsilon = MathImpl.__epsilon__();
     const auto& rhoValue = get_double(token, rho);
+    const auto& epsilonValue = get_double(token, epsilon);
 
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != accumGradList.size() ||
         weightsList.size() != accumUpdateList.size()) {
-      throw InvalidOperationError(
-          token,
-          "All lists must be the same size in adaptive gradient optimizer.");
+      throw TensorShapeError(token, MLBuiltins.OptimAdadelta);
     }
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      const auto& grad = get_double(token, gradientsList[i]);
-      accumGradList[i] = rhoValue * get_double(token, accumGradList[i]) +
-                         (1 - rhoValue) * grad * grad;
-      const auto& accumUpdate = get_double(token, accumUpdateList[i]);
-      double update =
-          std::sqrt((accumUpdate + epsilon) /
-                    (get_double(token, accumGradList[i]) + epsilon)) *
-          grad;
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(accumGradList[i]) &&
+          std::holds_alternative<k_list>(accumUpdateList[i])) {
+        __adadelta__(token, weightsList[i], gradientsList[i], accumGradList[i],
+                     accumUpdateList[i], rho, epsilon);
+      } else {
+        const auto& grad = get_double(token, gradientsList[i]);
+        accumGradList[i] = rhoValue * get_double(token, accumGradList[i]) +
+                           (1 - rhoValue) * grad * grad;
+        const auto& accumUpdate = get_double(token, accumUpdateList[i]);
+        double update =
+            std::sqrt((accumUpdate + epsilonValue) /
+                      (get_double(token, accumGradList[i]) + epsilonValue)) *
+            grad;
 
-      accumUpdateList[i] =
-          rhoValue * accumUpdate + (1 - rhoValue) * update * update;
-      weightsList[i] = get_double(token, weightsList[i]) - update;
+        accumUpdateList[i] =
+            rhoValue * accumUpdate + (1 - rhoValue) * update * update;
+        weightsList[i] = get_double(token, weightsList[i]) - update;
+      }
     }
   }
 
   void __adagrad__(const Token& token, k_value& weights,
                    const k_value& gradients, k_value& v,
-                   const k_value& learning_rate = 0.01) {
+                   const k_value& learning_rate, const k_value& epsilon) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(
-          token, "Expected a list for weights in adaptive gradient optimizer.");
+      throw TensorError(token, "weights", MLBuiltins.OptimAdagrad);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(
-          token,
-          "Expected a list for gradients in adaptive gradient optimizer.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimAdagrad);
     }
     if (!std::holds_alternative<k_list>(v)) {
-      throw ConversionError(token,
-                            "Expected a list for sum of squared gradients in "
-                            "adaptive gradient optimizer.");
+      throw TensorError(token, "v", MLBuiltins.OptimAdagrad);
     }
 
     const auto& gradientsList = std::get<k_list>(gradients)->elements;
@@ -1137,46 +1122,44 @@ struct {
 
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != vList.size()) {
-      throw InvalidOperationError(
-          token,
-          "All lists must be the same size in adaptive gradient optimizer.");
+      throw TensorShapeError(token, MLBuiltins.OptimAdagrad);
     }
 
     const auto& learningRate = get_double(token, learning_rate);
+    const auto& epsilonValue = get_double(token, epsilon);
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      const auto& gradient = get_double(token, gradientsList[i]);
-      vList[i] = get_double(token, vList[i]) + (gradient * gradient);
-      weightsList[i] =
-          get_double(token, weightsList[i]) -
-          (learningRate * gradient /
-           (std::sqrt(get_double(token, vList[i])) + MathImpl.__epsilon__()));
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(vList[i])) {
+        __adagrad__(token, weightsList[i], gradientsList[i], vList[i],
+                    learning_rate, epsilon);
+      } else {
+        const auto& gradient = get_double(token, gradientsList[i]);
+        vList[i] = get_double(token, vList[i]) + (gradient * gradient);
+        weightsList[i] =
+            get_double(token, weightsList[i]) -
+            (learningRate * gradient /
+             (std::sqrt(get_double(token, vList[i])) + epsilonValue));
+      }
     }
   }
 
   void __adamax__(const Token& token, k_value& weights,
                   const k_value& gradients, k_value& m, k_value& v,
                   const k_value& learning_rate, const k_value& beta1,
-                  const k_value& beta2) {
+                  const k_value& beta2, const k_value& epsilon) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(token,
-                            "Expected a list for weights in adaptive moment "
-                            "estimation (max norm) optimizer.");
+      throw TensorError(token, "weights", MLBuiltins.OptimAdamax);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(token,
-                            "Expected a list for gradients in adaptive moment "
-                            "estimation (max norm) optimizer.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimAdamax);
     }
     if (!std::holds_alternative<k_list>(m)) {
-      throw ConversionError(token,
-                            "Expected a list for first moment estimate in "
-                            "adaptive moment estimation (max norm) optimizer.");
+      throw TensorError(token, "m", MLBuiltins.OptimAdamax);
     }
     if (!std::holds_alternative<k_list>(v)) {
-      throw ConversionError(token,
-                            "Expected a list for second moment estimate in "
-                            "adaptive moment estimation (max norm) optimizer.");
+      throw TensorError(token, "v", MLBuiltins.OptimAdamax);
     }
 
     const auto& gradientsList = std::get<k_list>(gradients)->elements;
@@ -1187,50 +1170,50 @@ struct {
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != mList.size() ||
         weightsList.size() != vList.size()) {
-      throw InvalidOperationError(token,
-                                  "All lists must be the same size in adaptive "
-                                  "moment estimation (max norm) optimizer.");
+      throw TensorShapeError(token, MLBuiltins.OptimAdamax);
     }
 
     const auto& learningRate = get_double(token, learning_rate);
     const auto& beta1Value = get_double(token, beta1);
     const auto& beta2Value = get_double(token, beta2);
+    const auto& epsilonValue = get_double(token, epsilon);
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      const auto& grad = get_double(token, gradientsList[i]);
-      mList[i] =
-          beta1Value * get_double(token, mList[i]) + (1 - beta1Value) * grad;
-      vList[i] =
-          std::max(beta2Value * get_double(token, vList[i]), std::abs(grad));
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(mList[i]) &&
+          std::holds_alternative<k_list>(vList[i])) {
+        __adamax__(token, weightsList[i], gradientsList[i], mList[i], vList[i],
+                   learning_rate, beta1, beta2, epsilon);
+      } else {
+        const auto& grad = get_double(token, gradientsList[i]);
+        mList[i] =
+            beta1Value * get_double(token, mList[i]) + (1 - beta1Value) * grad;
+        vList[i] =
+            std::max(beta2Value * get_double(token, vList[i]), std::abs(grad));
 
-      weightsList[i] = get_double(token, weightsList[i]) -
-                       (learningRate * get_double(token, mList[i]) /
-                        (get_double(token, vList[i]) + MathImpl.__epsilon__()));
+        weightsList[i] = get_double(token, weightsList[i]) -
+                         (learningRate * get_double(token, mList[i]) /
+                          (get_double(token, vList[i]) + epsilonValue));
+      }
     }
   }
 
   void __adam__(const Token& token, k_value& weights, const k_value& gradients,
                 k_value& m, k_value& v, const k_value& learning_rate,
-                const k_value& beta1, const k_value& beta2, const k_value& t) {
+                const k_value& beta1, const k_value& beta2, const k_value& t,
+                const k_value& epsilon) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(token,
-                            "Expected a list for weights in adaptive moment "
-                            "estimation optimizer.");
+      throw TensorError(token, "weights", MLBuiltins.OptimAdam);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(token,
-                            "Expected a list for gradients in adaptive moment "
-                            "estimation optimizer.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimAdam);
     }
     if (!std::holds_alternative<k_list>(m)) {
-      throw ConversionError(token,
-                            "Expected a list for first moment estimate in "
-                            "adaptive moment estimation optimizer.");
+      throw TensorError(token, "m", MLBuiltins.OptimAdam);
     }
     if (!std::holds_alternative<k_list>(v)) {
-      throw ConversionError(token,
-                            "Expected a list for second moment estimate in "
-                            "adaptive moment estimation optimizer.");
+      throw TensorError(token, "v", MLBuiltins.OptimAdam);
     }
 
     const auto& gradientsList = std::get<k_list>(gradients)->elements;
@@ -1241,60 +1224,56 @@ struct {
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != mList.size() ||
         weightsList.size() != vList.size()) {
-      throw InvalidOperationError(token,
-                                  "All lists must be the same size in adaptive "
-                                  "moment estimation optimizer.");
+      throw TensorShapeError(token, MLBuiltins.OptimAdam);
     }
 
     const auto& learningRate = get_double(token, learning_rate);
     const auto& beta1Value = get_double(token, beta1);
     const auto& beta2Value = get_double(token, beta2);
     const auto& tValue = get_integer(token, t);
+    const auto& epsilonValue = get_double(token, epsilon);
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      const auto& gradient = get_double(token, gradientsList[i]);
-      mList[i] = beta1Value * get_double(token, mList[i]) +
-                 (1.0 - beta1Value) * gradient;
-      vList[i] = beta2Value * get_double(token, vList[i]) +
-                 (1.0 - beta2Value) * gradient * gradient;
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(mList[i]) &&
+          std::holds_alternative<k_list>(vList[i])) {
+        __adam__(token, weightsList[i], gradientsList[i], mList[i], vList[i],
+                 learning_rate, beta1, beta2, t, epsilon);
+      } else {
+        const auto& gradient = get_double(token, gradientsList[i]);
+        mList[i] = beta1Value * get_double(token, mList[i]) +
+                   (1.0 - beta1Value) * gradient;
+        vList[i] = beta2Value * get_double(token, vList[i]) +
+                   (1.0 - beta2Value) * gradient * gradient;
 
-      double m_hat =
-          get_double(token, mList[i]) / (1.0 - std::pow(beta1Value, tValue));
-      double v_hat =
-          get_double(token, vList[i]) / (1.0 - std::pow(beta2Value, tValue));
+        double m_hat =
+            get_double(token, mList[i]) / (1.0 - std::pow(beta1Value, tValue));
+        double v_hat =
+            get_double(token, vList[i]) / (1.0 - std::pow(beta2Value, tValue));
 
-      weightsList[i] =
-          get_double(token, weightsList[i]) -
-          learningRate * m_hat / (std::sqrt(v_hat) + MathImpl.__epsilon__());
+        weightsList[i] =
+            get_double(token, weightsList[i]) -
+            learningRate * m_hat / (std::sqrt(v_hat) + epsilonValue);
+      }
     }
   }
 
   void __nadam__(const Token& token, k_value& weights, const k_value& gradients,
                  k_value& m, k_value& v, const k_value& learning_rate,
-                 const k_value& beta1, const k_value& beta2, const k_value& t) {
+                 const k_value& beta1, const k_value& beta2, const k_value& t,
+                 const k_value& epsilon) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(
-          token,
-          "Expected a list for weights in Nesterov-accelerated adaptive moment "
-          "estimation optimizer.");
+      throw TensorError(token, "weights", MLBuiltins.OptimNadam);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(
-          token,
-          "Expected a list for gradients in Nesterov-accelerated adaptive "
-          "moment estimation optimizer.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimNadam);
     }
     if (!std::holds_alternative<k_list>(m)) {
-      throw ConversionError(
-          token,
-          "Expected a list for first moment estimate in Nesterov-accelerated "
-          "adaptive moment estimation optimizer.");
+      throw TensorError(token, "m", MLBuiltins.OptimNadam);
     }
     if (!std::holds_alternative<k_list>(v)) {
-      throw ConversionError(
-          token,
-          "Expected a list for second moment estimate in Nesterov-accelerated "
-          "adaptive moment estimation optimizer.");
+      throw TensorError(token, "v", MLBuiltins.OptimNadam);
     }
 
     const auto& gradientsList = std::get<k_list>(gradients)->elements;
@@ -1305,32 +1284,38 @@ struct {
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != mList.size() ||
         weightsList.size() != vList.size()) {
-      throw InvalidOperationError(
-          token,
-          "All lists must be the same size in Nesterov-accelerated adaptive "
-          "moment estimation optimizer.");
+      throw TensorShapeError(token, MLBuiltins.OptimNadam);
     }
 
     const auto& learningRate = get_double(token, learning_rate);
     const auto& beta1Value = get_double(token, beta1);
     const auto& beta2Value = get_double(token, beta2);
     const auto& tValue = get_integer(token, t);
+    const auto& epsilonValue = get_double(token, epsilon);
     double beta1_t = beta1Value * (1 - std::pow(0.1, tValue / 1000.0));
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      const auto& grad = get_double(token, gradientsList[i]);
-      mList[i] =
-          beta1Value * get_double(token, mList[i]) + (1 - beta1Value) * grad;
-      vList[i] = beta2Value * get_double(token, vList[i]) +
-                 (1 - beta2Value) * grad * grad;
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(mList[i]) &&
+          std::holds_alternative<k_list>(vList[i])) {
+        __nadam__(token, weightsList[i], gradientsList[i], mList[i], vList[i],
+                  learning_rate, beta1, beta2, t, epsilon);
+      } else {
+        const auto& grad = get_double(token, gradientsList[i]);
+        mList[i] =
+            beta1Value * get_double(token, mList[i]) + (1 - beta1Value) * grad;
+        vList[i] = beta2Value * get_double(token, vList[i]) +
+                   (1 - beta2Value) * grad * grad;
 
-      double m_hat = get_double(token, mList[i]) / (1 - beta1_t);
-      double v_hat = get_double(token, vList[i]) / (1 - beta2Value);
+        double m_hat = get_double(token, mList[i]) / (1 - beta1_t);
+        double v_hat = get_double(token, vList[i]) / (1 - beta2Value);
 
-      weightsList[i] =
-          get_double(token, weightsList[i]) -
-          (learningRate * (beta1Value * m_hat + (1 - beta1Value) * grad) /
-           (std::sqrt(v_hat) + MathImpl.__epsilon__()));
+        weightsList[i] =
+            get_double(token, weightsList[i]) -
+            (learningRate * (beta1Value * m_hat + (1 - beta1Value) * grad) /
+             (std::sqrt(v_hat) + epsilonValue));
+      }
     }
   }
 
@@ -1338,37 +1323,38 @@ struct {
                k_value& velocity, const k_value& learning_rate,
                const k_value& momentum) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(
-          token, "Expected a list for weights in stochastic gradient descent.");
+      throw TensorError(token, "weights", MLBuiltins.OptimSGD);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(
-          token,
-          "Expected a list for gradients in stochastic gradient descent.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimSGD);
     }
     if (!std::holds_alternative<k_list>(velocity)) {
-      throw ConversionError(
-          token,
-          "Expected a list for velocity in stochastic gradient descent.");
+      throw TensorError(token, "velocity", MLBuiltins.OptimSGD);
     }
+
     auto& weightsList = std::get<k_list>(weights)->elements;
     auto& gradientsList = std::get<k_list>(gradients)->elements;
     auto& velocityList = std::get<k_list>(velocity)->elements;
 
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != velocityList.size()) {
-      throw InvalidOperationError(
-          token,
-          "All lists must be the same size in stochastic gradient descent.");
+      throw TensorShapeError(token, MLBuiltins.OptimSGD);
     }
 
     const auto& momentumValue = get_double(token, momentum);
     const auto& learningRate = get_double(token, learning_rate);
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      velocityList[i] = momentumValue * get_double(token, velocityList[i]) -
-                        learningRate * get_double(token, gradientsList[i]);
-      weightsList[i] =
-          MathImpl.do_addition(token, weightsList[i], velocityList[i]);
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(velocityList[i])) {
+        __sgd__(token, weightsList[i], gradientsList[i], velocityList[i],
+                learning_rate, momentum);
+      } else {
+        velocityList[i] = momentumValue * get_double(token, velocityList[i]) -
+                          learningRate * get_double(token, gradientsList[i]);
+        weightsList[i] =
+            MathImpl.do_addition(token, weightsList[i], velocityList[i]);
+      }
     }
   }
 
@@ -1376,19 +1362,13 @@ struct {
                         const k_value& gradients, k_value& velocity,
                         const k_value& learning_rate, const k_value& momentum) {
     if (!std::holds_alternative<k_list>(weights)) {
-      throw ConversionError(token,
-                            "Expected a list for weights in Nesterov "
-                            "stochastic gradient descent.");
+      throw TensorError(token, "weights", MLBuiltins.OptimSGDNesterov);
     }
     if (!std::holds_alternative<k_list>(gradients)) {
-      throw ConversionError(token,
-                            "Expected a list for gradients in Nesterov "
-                            "stochastic gradient descent.");
+      throw TensorError(token, "gradients", MLBuiltins.OptimSGDNesterov);
     }
     if (!std::holds_alternative<k_list>(velocity)) {
-      throw ConversionError(token,
-                            "Expected a list for velocity in Nesterov "
-                            "stochastic gradient descent.");
+      throw TensorError(token, "velocity", MLBuiltins.OptimSGDNesterov);
     }
     auto& weightsList = std::get<k_list>(weights)->elements;
     auto& gradientsList = std::get<k_list>(gradients)->elements;
@@ -1396,90 +1376,145 @@ struct {
 
     if (weightsList.size() != gradientsList.size() ||
         weightsList.size() != velocityList.size()) {
-      throw InvalidOperationError(token,
-                                  "All lists must be the same size in Nesterov "
-                                  "stochastic gradient descent.");
+      throw TensorShapeError(token, MLBuiltins.OptimSGDNesterov);
     }
 
     const auto& momentumValue = get_double(token, momentum);
     const auto& learningRate = get_double(token, learning_rate);
 
     for (size_t i = 0; i < weightsList.size(); ++i) {
-      double lookahead_weight =
-          get_double(token, weightsList[i]) +
-          momentumValue * get_double(token, velocityList[i]);
-      velocityList[i] = momentumValue * get_double(token, velocityList[i]) -
-                        learningRate * get_double(token, gradientsList[i]);
-      weightsList[i] = lookahead_weight + get_double(token, velocityList[i]);
+      if (std::holds_alternative<k_list>(weightsList[i]) &&
+          std::holds_alternative<k_list>(gradientsList[i]) &&
+          std::holds_alternative<k_list>(velocityList[i])) {
+        __nesterov_sgd__(token, weightsList[i], gradientsList[i],
+                         velocityList[i], learning_rate, momentum);
+      } else {
+        const auto& grad = get_double(token, gradientsList[i]);
+        double velocity_update =
+            momentumValue * get_double(token, velocityList[i]) -
+            learningRate * grad;
+
+        weightsList[i] = get_double(token, weightsList[i]) +
+                         momentumValue * velocity_update -
+                         learningRate * get_double(token, grad);
+
+        velocityList[i] = velocity_update;
+      }
     }
   }
 } MLOptimizerBuiltins;
 
 struct {
   k_value __binary_crossentropy__(const Token& token, const k_value& y_true,
-                                  const k_value& y_pred) {
-    const auto& yTrue = get_double(token, y_true);
-    const auto& yPred = get_double(token, y_pred);
+                                  const k_value& y_pred,
+                                  const k_value& epsilon) {
+    if (std::holds_alternative<k_list>(y_true) &&
+        std::holds_alternative<k_list>(y_pred)) {
+      const auto& yTrueList = std::get<k_list>(y_true)->elements;
+      const auto& yPredList = std::get<k_list>(y_pred)->elements;
 
-    return -(yTrue * std::log(yPred) + (1 - yTrue) * std::log(1 - yPred));
+      if (yTrueList.size() != yPredList.size()) {
+        throw TensorShapeError(token, MLBuiltins.LossBinaryCrossEntropy);
+      }
+
+      if (yTrueList.empty()) {
+        throw EmptyTensorError(token, "y_true",
+                               MLBuiltins.LossBinaryCrossEntropy);
+      }
+
+      double total_loss = 0.0;
+      for (size_t i = 0; i < yTrueList.size(); ++i) {
+        total_loss += std::get<double>(__binary_crossentropy__(
+            token, yTrueList[i], yPredList[i], epsilon));
+      }
+
+      return total_loss / yTrueList.size();
+    } else {
+      const auto& yTrue = get_double(token, y_true);
+      const auto& yPred = get_double(token, y_pred);
+      const auto& epsilonValue = get_double(token, epsilon);
+
+      double clippedYPred =
+          std::min(std::max(yPred, epsilonValue), 1.0 - epsilonValue);
+
+      return -(yTrue * std::log(clippedYPred) +
+               (1 - yTrue) * std::log(1 - clippedYPred));
+    }
   }
 
   double __binary_focal_loss__(const Token& token, const k_value& y_true,
-                               const k_value& y_pred,
-                               const k_value& gamma = 2.0,
-                               const k_value& alpha = 0.25) {
-    double epsilon = MathImpl.__epsilon__();
-    double yPred = get_double(token, y_pred);
-    double gammaValue = get_double(token, gamma);
-    double alphaValue = get_double(token, alpha);
-    yPred = std::max(std::min(yPred, 1.0 - epsilon), epsilon);
+                               const k_value& y_pred, const k_value& gamma,
+                               const k_value& alpha, const k_value& epsilon) {
+    if (std::holds_alternative<k_list>(y_true) &&
+        std::holds_alternative<k_list>(y_pred)) {
+      const auto& yTrueList = std::get<k_list>(y_true)->elements;
+      const auto& yPredList = std::get<k_list>(y_pred)->elements;
 
-    if (get_double(token, y_true) == 1.0) {
-      return -alphaValue * std::pow(1.0 - yPred, gammaValue) * std::log(yPred);
+      if (yTrueList.size() != yPredList.size()) {
+        throw TensorShapeError(token, MLBuiltins.LossBinaryFocal);
+      }
+
+      if (yTrueList.empty()) {
+        throw EmptyTensorError(token, "y_true", MLBuiltins.LossBinaryFocal);
+      }
+
+      double total_loss = 0.0;
+      for (size_t i = 0; i < yTrueList.size(); ++i) {
+        total_loss += __binary_focal_loss__(token, yTrueList[i], yPredList[i],
+                                            gamma, alpha, epsilon);
+      }
+
+      return total_loss / yTrueList.size();
+    } else {
+      const auto& epsilonValue = get_double(token, epsilon);
+      double yPred = get_double(token, y_pred);
+      double gammaValue = get_double(token, gamma);
+      double alphaValue = get_double(token, alpha);
+      yPred = std::max(std::min(yPred, 1.0 - epsilonValue), epsilonValue);
+
+      if (get_double(token, y_true) == 1.0) {
+        return -alphaValue * std::pow(1.0 - yPred, gammaValue) *
+               std::log(yPred);
+      }
+
+      return -(1.0 - alphaValue) * std::pow(yPred, gammaValue) *
+             std::log(1.0 - yPred);
     }
-
-    return -(1.0 - alphaValue) * std::pow(yPred, gammaValue) *
-           std::log(1.0 - yPred);
   }
 
   k_value __categorical_crossentropy__(const Token& token,
                                        const k_value& y_true,
-                                       const k_value& y_pred) {
-    if (!std::holds_alternative<k_list>(y_true)) {
-      throw ConversionError(token,
-                            "Expected a list for actual values in categorical "
-                            "cross entropy function.");
+                                       const k_value& y_pred,
+                                       const k_value& epsilon) {
+    if (std::holds_alternative<k_list>(y_true) &&
+        std::holds_alternative<k_list>(y_pred)) {
+      const auto& yTrueList = std::get<k_list>(y_true)->elements;
+      const auto& yPredList = std::get<k_list>(y_pred)->elements;
+
+      if (yTrueList.size() != yPredList.size()) {
+        throw TensorShapeError(token, MLBuiltins.LossCatCrossEntropy);
+      }
+
+      if (yTrueList.empty()) {
+        throw EmptyTensorError(token, "y_true", MLBuiltins.LossCatCrossEntropy);
+      }
+
+      double total_loss = 0.0;
+      for (size_t i = 0; i < yTrueList.size(); ++i) {
+        total_loss += std::get<double>(__categorical_crossentropy__(
+            token, yTrueList[i], yPredList[i], epsilon));
+      }
+
+      return total_loss / yTrueList.size();
+    } else {
+      double yTrue = get_double(token, y_true);
+      double yPred = get_double(token, y_pred);
+      const auto& epsilonValue = get_double(token, epsilon);
+
+      double pred = std::max(yPred, epsilonValue);
+
+      return -yTrue * std::log(pred);
     }
-    if (!std::holds_alternative<k_list>(y_pred)) {
-      throw ConversionError(token,
-                            "Expected a list for predicted values in "
-                            "categorical cross entropy function.");
-    }
-
-    const auto& yTrue = std::get<k_list>(y_true)->elements;
-    const auto& yPred = std::get<k_list>(y_pred)->elements;
-
-    if (yTrue.size() != yPred.size()) {
-      throw InvalidOperationError(token,
-                                  "All lists must be the same size in "
-                                  "categorical cross entropy function.");
-    }
-
-    if (yTrue.empty()) {
-      throw EmptyListError(
-          token,
-          "Expected non-empty lists in categorical cross entropy function.");
-    }
-
-    double loss = 0.0;
-    double pred = 0.0;
-
-    for (size_t i = 0; i < yTrue.size(); ++i) {
-      pred = std::max(get_double(token, yPred[i]), MathImpl.__epsilon__());
-      loss -= get_double(token, yTrue[i]) * std::log(pred);
-    }
-
-    return loss;
   }
 
   k_value __cosine_similarity__(const Token& token, const k_value& y_true,
@@ -1501,7 +1536,7 @@ struct {
     if (yTrue.size() != yPred.size()) {
       throw InvalidOperationError(
           token,
-          "All lists must be the same size in cosine similarity function.");
+          "All lists must be the same shape in cosine similarity function.");
     }
 
     if (yTrue.empty()) {
@@ -1553,7 +1588,7 @@ struct {
 
     if (yTrue.size() != yPred.size()) {
       throw InvalidOperationError(
-          token, "All lists must be the same size in Dice loss function.");
+          token, "All lists must be the same shape in Dice loss function.");
     }
 
     if (yTrue.empty()) {
@@ -1595,7 +1630,7 @@ struct {
 
     if (yTrue.size() != yPred.size()) {
       throw InvalidOperationError(
-          token, "All lists must be the same size in focal loss function.");
+          token, "All lists must be the same shape in focal loss function.");
     }
 
     if (yTrue.empty()) {
@@ -1640,7 +1675,7 @@ struct {
 
     if (yTrue.size() != yPred.size()) {
       throw InvalidOperationError(token,
-                                  "All lists must be the same size in "
+                                  "All lists must be the same shape in "
                                   "Kullback-Leibler divergence function.");
     }
 
@@ -1704,7 +1739,7 @@ struct {
     if (yTrue.size() != yPred.size()) {
       throw InvalidOperationError(
           token,
-          "All lists must be the same size in mean squared error function.");
+          "All lists must be the same shape in mean squared error function.");
     }
 
     if (yTrue.empty()) {
@@ -1750,7 +1785,7 @@ struct {
     if (yTrue.size() != yPred.size()) {
       throw InvalidOperationError(
           token,
-          "All lists must be the same size in mean squared error function.");
+          "All lists must be the same shape in mean squared error function.");
     }
 
     if (yTrue.empty()) {

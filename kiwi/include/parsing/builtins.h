@@ -587,11 +587,32 @@ struct {
   const k_string ActLinear = "__linear__";
 
   std::unordered_set<k_string> builtins = {
-      RegDropout, RegWeightDecay, RegL1Lasso, RegL2Ridge, RegElasticNet};
+      RegDropout,       RegWeightDecay,
+      RegL1Lasso,       RegL2Ridge,
+      RegElasticNet,    OptimRMSProp,
+      OptimAdadelta,    OptimAdagrad,
+      OptimAdamax,      OptimAdam,
+      OptimNadam,       OptimSGD,
+      OptimSGDNesterov, LossBinaryCrossEntropy,
+      LossBinaryFocal,  LossCatCrossEntropy};
+
   std::unordered_set<KName> st_builtins = {
-      KName::Builtin_MLReg_Dropout, KName::Builtin_MLReg_WeightDecay,
-      KName::Builtin_MLReg_L1Lasso, KName::Builtin_MLReg_L2Ridge,
-      KName::Builtin_MLReg_ElasticNet};
+      KName::Builtin_MLReg_Dropout,
+      KName::Builtin_MLReg_WeightDecay,
+      KName::Builtin_MLReg_L1Lasso,
+      KName::Builtin_MLReg_L2Ridge,
+      KName::Builtin_MLReg_ElasticNet,
+      KName::Builtin_MLOptim_RMSProp,
+      KName::Builtin_MLOptim_Adadelta,
+      KName::Builtin_MLOptim_Adagrad,
+      KName::Builtin_MLOptim_Adamax,
+      KName::Builtin_MLOptim_Adam,
+      KName::Builtin_MLOptim_Nadam,
+      KName::Builtin_MLOptim_SGD,
+      KName::Builtin_MLOptim_SGDNesterov,
+      KName::Builtin_MLLoss_BinaryCrossEntropy,
+      KName::Builtin_MLLoss_BinaryFocal,
+      KName::Builtin_MLLoss_CatCrossEntropy};
 
   bool is_builtin(const k_string& arg) {
     return builtins.find(arg) != builtins.end();

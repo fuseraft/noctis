@@ -630,6 +630,28 @@ class Lexer {
       st = KName::Builtin_MLReg_L2Ridge;
     } else if (builtin == MLBuiltins.RegElasticNet) {
       st = KName::Builtin_MLReg_ElasticNet;
+    } else if (builtin == MLBuiltins.OptimRMSProp) {
+      st = KName::Builtin_MLOptim_RMSProp;
+    } else if (builtin == MLBuiltins.OptimAdadelta) {
+      st = KName::Builtin_MLOptim_Adadelta;
+    } else if (builtin == MLBuiltins.OptimAdagrad) {
+      st = KName::Builtin_MLOptim_Adagrad;
+    } else if (builtin == MLBuiltins.OptimAdamax) {
+      st = KName::Builtin_MLOptim_Adamax;
+    } else if (builtin == MLBuiltins.OptimAdam) {
+      st = KName::Builtin_MLOptim_Adam;
+    } else if (builtin == MLBuiltins.OptimNadam) {
+      st = KName::Builtin_MLOptim_Nadam;
+    } else if (builtin == MLBuiltins.OptimSGD) {
+      st = KName::Builtin_MLOptim_SGD;
+    } else if (builtin == MLBuiltins.OptimSGDNesterov) {
+      st = KName::Builtin_MLOptim_SGDNesterov;
+    } else if (builtin == MLBuiltins.LossBinaryCrossEntropy) {
+      st = KName::Builtin_MLLoss_BinaryCrossEntropy;
+    } else if (builtin == MLBuiltins.LossBinaryFocal) {
+      st = KName::Builtin_MLLoss_BinaryFocal;
+    } else if (builtin == MLBuiltins.LossCatCrossEntropy) {
+      st = KName::Builtin_MLLoss_CatCrossEntropy;
     }
 
     return createToken(KTokenType::IDENTIFIER, st, builtin);

@@ -278,6 +278,37 @@ class TokenStreamError : public KiwiError {
       : KiwiError(token, "TokenStreamError", message) {}
 };
 
+class TensorError : public KiwiError {
+ public:
+  TensorError(const std::string& message)
+      : KiwiError(Token::createEmpty(), "TensorError", message) {}
+  TensorError(const Token& token, const std::string& name,
+              const std::string& funcName)
+      : KiwiError(token, "TensorError",
+                  "Expected a tensor for parameter '" + name +
+                      "' in : " + funcName) {}
+};
+
+class TensorShapeError : public KiwiError {
+ public:
+  TensorShapeError(const std::string& message)
+      : KiwiError(Token::createEmpty(), "TensorShapeError", message) {}
+  TensorShapeError(const Token& token, const std::string& funcName)
+      : KiwiError(token, "TensorShapeError",
+                  "All tensors must be the same shape in: " + funcName) {}
+};
+
+class EmptyTensorError : public KiwiError {
+ public:
+  EmptyTensorError(const std::string& message)
+      : KiwiError(Token::createEmpty(), "EmptyTensorError", message) {}
+  EmptyTensorError(const Token& token, const std::string& name,
+                   const std::string& funcName)
+      : KiwiError(token, "EmptyTensorError",
+                  "Expected non-empty tensor for parameter '" + name +
+                      "' in: " + funcName) {}
+};
+
 template <typename T>
 class Thrower {
  public:
